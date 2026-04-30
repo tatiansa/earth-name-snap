@@ -66,7 +66,7 @@ function inputPage(baseUrl: string): any {
           props: {
             name: "word",
             label: "Name or handle",
-            placeholder: "TATIANA",
+            placeholder: "FARCASTER",
             defaultValue: "EARTH",
             maxLength: 12
           }

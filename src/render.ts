@@ -3,6 +3,11 @@ import { pickAsset } from "./landsat.js";
 
 const WIDTH = 960;
 const HEIGHT = 540;
+const SIDE_PADDING = 48;
+const TILE_GAP = 14;
+const MAX_TILE_W = 110;
+const TILE_ASPECT = 2.6; // height / width — узкие вертикальные плитки
+
 const imageCache = new Map<string, Buffer>();
 const outputCache = new Map<string, Buffer>();
 
@@ -68,45 +73,39 @@ export async function renderWordImage(word: string, seed: number): Promise<Buffe
 
   const chars = word.split("");
   const visibleLetters = chars.filter((char) => /[A-Z]/.test(char));
-  const rows = visibleLetters.length > 6 ? 2 : 1;
-  const cols = Math.min(6, Math.max(1, visibleLetters.length));
-  const gap = 10;
-  const tileW = rows === 1 ? 126 : 112;
-  const tileH = rows === 1 ? 318 : 204;
-  const rowGap = rows === 1 ? 0 : 18;
-  const gridW = cols * tileW + (cols - 1) * gap;
-  const startY = rows === 1 ? 94 : 76;
+  const n = Math.max(1, visibleLetters.length);
+
+  // Адаптивный размер плитки: уменьшаем для длинных слов
+  const availW = WIDTH - SIDE_PADDING * 2;
+  const tileW = Math.floor(Math.min(MAX_TILE_W, (availW - (n - 1) * TILE_GAP) / n));
+  const tileH = Math.round(tileW * TILE_ASPECT);
+
+  // Центрируем по горизонтали и вертикали
+  const gridW = n * tileW + (n - 1) * TILE_GAP;
+  const startX = Math.round((WIDTH - gridW) / 2);
+  const startY = Math.round((HEIGHT - tileH) / 2) - 10;
 
   const baseSvg = `
   <svg width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <radialGradient id="bg" cx="50%" cy="18%" r="80%">
+      <radialGradient id="bg" cx="50%" cy="20%" r="85%">
         <stop offset="0" stop-color="#19324a"/>
-        <stop offset="0.45" stop-color="#07111f"/>
+        <stop offset="0.5" stop-color="#07111f"/>
         <stop offset="1" stop-color="#02040a"/>
       </radialGradient>
     </defs>
     <rect width="100%" height="100%" fill="url(#bg)"/>
-    <text x="${WIDTH / 2}" y="38" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700" fill="#f8fafc">${escapeXml(word)} from space</text>
-    <text x="${WIDTH / 2}" y="508" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="20" fill="#cbd5e1">Imagery source: USGS/NASA Landsat</text>
+    <text x="${WIDTH - SIDE_PADDING}" y="${HEIGHT - 24}" text-anchor="end" font-family="Inter, Arial, sans-serif" font-size="14" font-style="italic" fill="#94a3b8" letter-spacing="1">USGS / NASA Landsat</text>
   </svg>`;
 
   const composites: sharp.OverlayOptions[] = [];
-  let letterIndex = 0;
+  let visibleIndex = 0;
   for (const char of chars) {
-    if (!/[A-Z]/.test(char)) {
-      letterIndex += 1;
-      continue;
-    }
-    const row = Math.floor(letterIndex / 6);
-    const col = letterIndex % 6;
-    const rowCount = row === rows - 1 ? visibleLetters.length - row * 6 : cols;
-    const rowW = rowCount * tileW + (rowCount - 1) * gap;
-    const x = Math.round((WIDTH - rowW) / 2 + col * (tileW + gap));
-    const y = Math.round(startY + row * (tileH + rowGap));
-    const tile = await makeTile(char, seed, letterIndex, tileW, tileH);
-    composites.push({ input: tile, left: x, top: y });
-    letterIndex += 1;
+    if (!/[A-Z]/.test(char)) continue;
+    const x = startX + visibleIndex * (tileW + TILE_GAP);
+    const tile = await makeTile(char, seed, visibleIndex, tileW, tileH);
+    composites.push({ input: tile, left: x, top: startY });
+    visibleIndex += 1;
   }
 
   const output = await sharp(Buffer.from(baseSvg))

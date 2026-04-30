@@ -13,9 +13,11 @@ const DEFAULT_BASE_URL = "http://localhost:3003";
 const DEFAULT_WORD = "FARCASTER";
 const SNAP_LINK_HEADER = `</>; rel="alternate"; type="${SNAP_MEDIA_TYPE}"`;
 
-// Можно менять под себя:
 const REGENERATE_MAX_PER_WINDOW = 5;
 const REGENERATE_WINDOW_MS = 30_000;
+
+const CREDIT_TEXT =
+  "Image source: USGS/NASA Landsat. This is an unofficial fun experiment by @tatiansa";
 
 type RateLimitEntry = {
   count: number;
@@ -223,8 +225,7 @@ function inputPage(baseUrl: string): any {
         credit: {
           type: "text",
           props: {
-            content:
-              "Imagery source: USGS/NASA Landsat. This is an unofficial fan experiment by @tatiansa.",
+            content: CREDIT_TEXT,
             size: "sm",
           },
         },
@@ -351,7 +352,7 @@ function resultPage(baseUrl: string, word: string, seed: number): any {
         credit: {
           type: "text",
           props: {
-            content: "Unofficial Snap. Imagery source: USGS/NASA Landsat.",
+            content: CREDIT_TEXT,
             size: "sm",
             align: "center",
           },
@@ -433,7 +434,7 @@ function cooldownPage(
         credit: {
           type: "text",
           props: {
-            content: "Unofficial Snap. Imagery source: USGS/NASA Landsat.",
+            content: CREDIT_TEXT,
             size: "sm",
             align: "center",
           },

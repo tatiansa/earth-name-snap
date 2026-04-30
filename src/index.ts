@@ -21,18 +21,6 @@ app.use(
   })
 );
 
-app.options("*", () => {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-      "Access-Control-Allow-Headers": "Accept,Content-Type,Authorization",
-      "Access-Control-Max-Age": "86400"
-    }
-  });
-});
-
 function getBaseUrl(requestUrl?: string): string {
   const envBase = process.env.SNAP_PUBLIC_BASE_URL?.replace(/\/$/, "");
 
@@ -48,13 +36,28 @@ function getBaseUrl(requestUrl?: string): string {
   return DEFAULT_BASE_URL;
 }
 
-function snapHeaders() {
+function corsHeaders() {
   return {
-    "Content-Type": SNAP_MEDIA_TYPE,
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Access-Control-Allow-Headers": "Accept,Content-Type,Authorization",
+    "Access-Control-Max-Age": "86400"
+  };
+}
+
+function snapHeaders() {
+  return {
+    ...corsHeaders(),
+    "Content-Type": SNAP_MEDIA_TYPE,
     "Cache-Control": "no-store",
+    Vary: "Accept"
+  };
+}
+
+function htmlHeaders() {
+  return {
+    ...corsHeaders(),
+    "Content-Type": "text/html; charset=utf-8",
     Vary: "Accept"
   };
 }
@@ -265,72 +268,8 @@ function resultPage(baseUrl: string, word: string, seed: number): any {
   };
 }
 
-app.get("/image", async (c) => {
-  const word = normalizeWord(c.req.query("word") || DEFAULT_WORD);
-  const seed = Number(c.req.query("seed") || "0") || 0;
-  const png = await renderWordImage(word, seed);
-
-  return new Response(new Uint8Array(png), {
-    headers: {
-      "Content-Type": "image/png",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-      "Access-Control-Allow-Headers": "Accept,Content-Type,Authorization",
-      "Cache-Control": "public, max-age=31536000, immutable"
-    }
-  });
-});
-
-app.get("/health", (c) => {
-  return c.json({
-    ok: true
-  });
-});
-
-registerSnapHandler(app, async (ctx) => {
-  const baseUrl = getBaseUrl(ctx.request.url);
-  const url = new URL(ctx.request.url);
-  const action = url.searchParams.get("action");
-
-  if (ctx.action.type === "get") {
-    const word = normalizeWord(url.searchParams.get("word") || "");
-    const seed = Number(url.searchParams.get("seed") || "0") || 0;
-
-    if (url.searchParams.has("word")) {
-      return resultPage(baseUrl, word, seed);
-    }
-
-    return inputPage(baseUrl);
-  }
-
-  if (action === "new") {
-    return inputPage(baseUrl);
-  }
-
-  const inputs = ctx.action.inputs ?? {};
-  const inputWord =
-    typeof inputs.word === "string" && inputs.word.trim()
-      ? inputs.word
-      : DEFAULT_WORD;
-
-  const wordFromInput = normalizeWord(inputWord);
-  const wordFromUrl = normalizeWord(url.searchParams.get("word") || DEFAULT_WORD);
-
-  const word = action === "regenerate" ? wordFromUrl : wordFromInput;
-  const seed = Number(url.searchParams.get("seed") || Date.now()) || Date.now();
-
-  return resultPage(baseUrl, word, seed);
-});
-
-app.get("*", (c) => {
-  const accept = c.req.header("Accept") || "";
-
-  if (accept.includes(SNAP_MEDIA_TYPE)) {
-    return c.json(inputPage(getBaseUrl(c.req.url)), 200, snapHeaders());
-  }
-
-  return c.html(
-    `<!doctype html>
+function htmlPage(): string {
+  return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -374,15 +313,113 @@ app.get("*", (c) => {
       <p><a href="${NASA_LANDSAT_URL}">Original NASA Your Name in Landsat tool</a></p>
     </main>
   </body>
-</html>`,
-    200,
-    {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-      "Access-Control-Allow-Headers": "Accept,Content-Type,Authorization",
-      Vary: "Accept"
+</html>`;
+}
+
+app.options("*", () => {
+  return new Response(null, {
+    status: 204,
+    headers: corsHeaders()
+  });
+});
+
+app.get("/", (c) => {
+  const accept = c.req.header("Accept") || "";
+  const baseUrl = getBaseUrl(c.req.url);
+  const url = new URL(c.req.url);
+
+  if (accept.includes(SNAP_MEDIA_TYPE)) {
+    const wordParam = url.searchParams.get("word");
+    const seed = Number(url.searchParams.get("seed") || "0") || 0;
+
+    const page = wordParam
+      ? resultPage(baseUrl, normalizeWord(wordParam), seed)
+      : inputPage(baseUrl);
+
+    return new Response(JSON.stringify(page), {
+      status: 200,
+      headers: snapHeaders()
+    });
+  }
+
+  return new Response(htmlPage(), {
+    status: 200,
+    headers: htmlHeaders()
+  });
+});
+
+app.get("/image", async (c) => {
+  const word = normalizeWord(c.req.query("word") || DEFAULT_WORD);
+  const seed = Number(c.req.query("seed") || "0") || 0;
+  const png = await renderWordImage(word, seed);
+
+  return new Response(new Uint8Array(png), {
+    headers: {
+      ...corsHeaders(),
+      "Content-Type": "image/png",
+      "Cache-Control": "public, max-age=31536000, immutable"
     }
+  });
+});
+
+app.get("/health", (c) => {
+  return c.json(
+    {
+      ok: true
+    },
+    200,
+    corsHeaders()
   );
+});
+
+registerSnapHandler(app, async (ctx) => {
+  const baseUrl = getBaseUrl(ctx.request.url);
+  const url = new URL(ctx.request.url);
+  const action = url.searchParams.get("action");
+
+  if (ctx.action.type === "get") {
+    const word = normalizeWord(url.searchParams.get("word") || "");
+    const seed = Number(url.searchParams.get("seed") || "0") || 0;
+
+    if (url.searchParams.has("word")) {
+      return resultPage(baseUrl, word, seed);
+    }
+
+    return inputPage(baseUrl);
+  }
+
+  if (action === "new") {
+    return inputPage(baseUrl);
+  }
+
+  const inputs = ctx.action.inputs ?? {};
+  const inputWord =
+    typeof inputs.word === "string" && inputs.word.trim()
+      ? inputs.word
+      : DEFAULT_WORD;
+
+  const wordFromInput = normalizeWord(inputWord);
+  const wordFromUrl = normalizeWord(url.searchParams.get("word") || DEFAULT_WORD);
+  const word = action === "regenerate" ? wordFromUrl : wordFromInput;
+  const seed = Number(url.searchParams.get("seed") || Date.now()) || Date.now();
+
+  return resultPage(baseUrl, word, seed);
+});
+
+app.get("*", (c) => {
+  const accept = c.req.header("Accept") || "";
+
+  if (accept.includes(SNAP_MEDIA_TYPE)) {
+    return new Response(JSON.stringify(inputPage(getBaseUrl(c.req.url))), {
+      status: 200,
+      headers: snapHeaders()
+    });
+  }
+
+  return new Response(htmlPage(), {
+    status: 200,
+    headers: htmlHeaders()
+  });
 });
 
 if (process.env.VERCEL !== "1") {

@@ -30,7 +30,7 @@ function snapHeaders() {
 
 function inputPage(baseUrl: string) {
   return {
-    version: "2.0",
+    version: "2.0" as const,
     theme: { accent: "teal" },
     ui: {
       root: "page",
@@ -96,7 +96,7 @@ function resultPage(baseUrl: string, word: string, seed: number) {
   const shareText = `My Farcaster name, spelled by Earth. 🌍🛰️\n\nTry yours:`;
 
   return {
-    version: "2.0",
+    version: "2.0" as const,
     theme: { accent: "teal" },
     ui: {
       root: "page",
@@ -186,7 +186,7 @@ app.get("/image", async (c) => {
   const seed = Number(c.req.query("seed") || "0") || 0;
   const png = await renderWordImage(word, seed);
 
-  return new Response(png, {
+  return new Response(new Uint8Array(png), {
     headers: {
       "Content-Type": "image/png",
       "Access-Control-Allow-Origin": "*",

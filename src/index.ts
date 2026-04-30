@@ -81,7 +81,7 @@ function inputPage(baseUrl: string): any {
         credit: {
           type: "text",
           props: {
-            content: "Imagery source: USGS/NASA Landsat. This is an unofficial fan experiment.",
+            content: "Imagery source: USGS/NASA Landsat. This is an unofficial fan experiment by @tatiansa",
             size: "sm"
           }
         }

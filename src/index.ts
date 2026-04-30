@@ -7,7 +7,19 @@ import { renderWordImage } from "./render.js";
 
 const app = new Hono();
 
-app.use("*", cors());
+const SNAP_MEDIA_TYPE = "application/vnd.farcaster.snap+json";
+const DEFAULT_BASE_URL = "http://localhost:3003";
+const DEFAULT_WORD = "FARCASTER";
+
+app.use(
+  "*",
+  cors({
+    origin: "*",
+    allowMethods: ["GET", "POST", "OPTIONS"],
+    allowHeaders: ["Accept", "Content-Type", "Authorization"],
+    maxAge: 86400
+  })
+);
 
 app.options("*", () => {
   return new Response(null, {
@@ -21,13 +33,12 @@ app.options("*", () => {
   });
 });
 
-const SNAP_MEDIA_TYPE = "application/vnd.farcaster.snap+json";
-const DEFAULT_BASE_URL = "http://localhost:3003";
-const DEFAULT_WORD = "FARCASTER";
-
 function getBaseUrl(requestUrl?: string): string {
   const envBase = process.env.SNAP_PUBLIC_BASE_URL?.replace(/\/$/, "");
-  if (envBase) return envBase;
+
+  if (envBase) {
+    return envBase;
+  }
 
   if (requestUrl) {
     const url = new URL(requestUrl);
@@ -51,23 +62,31 @@ function snapHeaders() {
 function inputPage(baseUrl: string): any {
   return {
     version: "2.0" as const,
-    theme: { accent: "teal" },
+    theme: {
+      accent: "teal"
+    },
     ui: {
       root: "page",
       elements: {
         page: {
           type: "stack",
-          props: { gap: "md" },
+          props: {
+            gap: "md"
+          },
           children: ["badge", "title", "body", "word", "generate", "credit"]
         },
         badge: {
           type: "badge",
-          props: { label: "Landsat Snap", color: "teal", icon: "image" }
+          props: {
+            label: "Landsat Snap",
+            color: "teal",
+            icon: "image"
+          }
         },
         title: {
           type: "text",
           props: {
-            content: "Spell your name with Earth",
+            content: "Spell FARCASTER with Earth",
             weight: "bold"
           }
         },
@@ -125,13 +144,17 @@ function resultPage(baseUrl: string, word: string, seed: number): any {
 
   return {
     version: "2.0" as const,
-    theme: { accent: "teal" },
+    theme: {
+      accent: "teal"
+    },
     ui: {
       root: "page",
       elements: {
         page: {
           type: "stack",
-          props: { gap: "sm" },
+          props: {
+            gap: "sm"
+          },
           children: ["title", "image", "actions", "links", "credit"]
         },
         title: {
@@ -258,7 +281,11 @@ app.get("/image", async (c) => {
   });
 });
 
-app.get("/health", (c) => c.json({ ok: true }));
+app.get("/health", (c) => {
+  return c.json({
+    ok: true
+  });
+});
 
 registerSnapHandler(app, async (ctx) => {
   const baseUrl = getBaseUrl(ctx.request.url);
@@ -281,8 +308,14 @@ registerSnapHandler(app, async (ctx) => {
   }
 
   const inputs = ctx.action.inputs ?? {};
-  const wordFromInput = normalizeWord(inputs.word || DEFAULT_WORD);
+  const inputWord =
+    typeof inputs.word === "string" && inputs.word.trim()
+      ? inputs.word
+      : DEFAULT_WORD;
+
+  const wordFromInput = normalizeWord(inputWord);
   const wordFromUrl = normalizeWord(url.searchParams.get("word") || DEFAULT_WORD);
+
   const word = action === "regenerate" ? wordFromUrl : wordFromInput;
   const seed = Number(url.searchParams.get("seed") || Date.now()) || Date.now();
 
@@ -296,7 +329,8 @@ app.get("*", (c) => {
     return c.json(inputPage(getBaseUrl(c.req.url)), 200, snapHeaders());
   }
 
-  return c.html(`<!doctype html>
+  return c.html(
+    `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -340,7 +374,15 @@ app.get("*", (c) => {
       <p><a href="${NASA_LANDSAT_URL}">Original NASA Your Name in Landsat tool</a></p>
     </main>
   </body>
-</html>`);
+</html>`,
+    200,
+    {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      "Access-Control-Allow-Headers": "Accept,Content-Type,Authorization",
+      Vary: "Accept"
+    }
+  );
 });
 
 if (process.env.VERCEL !== "1") {

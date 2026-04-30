@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "SKIP_JFS_VERIFICATION=1 tsx src/index.ts",
     "build": "tsc --noEmit",
-    "start": "node --loader tsx src/index.ts"
+    "start": "tsx src/index.ts"
   },
   "dependencies": {
     "@farcaster/snap": "latest",

@@ -9,6 +9,18 @@ const app = new Hono();
 
 app.use("*", cors());
 
+app.options("*", (c) => {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      "Access-Control-Allow-Headers": "Accept,Content-Type,Authorization",
+      "Access-Control-Max-Age": "86400"
+    }
+  });
+});
+
 const SNAP_MEDIA_TYPE = "application/vnd.farcaster.snap+json";
 const DEFAULT_BASE_URL = "http://localhost:3003";
 

@@ -14,7 +14,10 @@ const SNAP_LINK_HEADER = `</>; rel="alternate"; type="${SNAP_MEDIA_TYPE}"`;
 
 function getBaseUrl(requestUrl?: string): string {
   const envBase = process.env.SNAP_PUBLIC_BASE_URL?.replace(/\/$/, "");
-  if (envBase) return envBase;
+
+  if (envBase) {
+    return envBase;
+  }
 
   if (requestUrl) {
     const url = new URL(requestUrl);
@@ -79,7 +82,7 @@ app.options("*", () => {
   });
 });
 
-function inputPage(baseUrl: string) {
+function inputPage(baseUrl: string): any {
   return {
     version: "2.0",
     theme: {
@@ -157,7 +160,7 @@ function inputPage(baseUrl: string) {
   };
 }
 
-function resultPage(baseUrl: string, word: string, seed: number) {
+function resultPage(baseUrl: string, word: string, seed: number): any {
   const imageUrl = `${baseUrl}/image?word=${encodeURIComponent(word)}&seed=${seed}`;
   const snapUrl = `${baseUrl}/?word=${encodeURIComponent(word)}&seed=${seed}`;
   const shareText = `${word}, spelled by Earth. 🌍🛰️ Try yours by @tatiansa`;

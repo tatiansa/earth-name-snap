@@ -183,7 +183,7 @@ function resultPage(baseUrl: string, word: string, seed: number): any {
         title: {
           type: "text",
           props: {
-            content: `${word} from space`,
+            content: word,
             weight: "bold",
             align: "center"
           }
@@ -208,6 +208,7 @@ function resultPage(baseUrl: string, word: string, seed: number): any {
           type: "button",
           props: {
             label: "Regenerate",
+            variant: "primary",
             icon: "refresh-cw"
           },
           on: {
@@ -225,7 +226,6 @@ function resultPage(baseUrl: string, word: string, seed: number): any {
           type: "button",
           props: {
             label: "Share",
-            variant: "primary",
             icon: "share"
           },
           on: {

@@ -96,7 +96,7 @@ function inputPage(baseUrl: string): any {
 function resultPage(baseUrl: string, word: string, seed: number): any {
   const imageUrl = `${baseUrl}/image?word=${encodeURIComponent(word)}&seed=${seed}`;
   const snapUrl = `${baseUrl}/?word=${encodeURIComponent(word)}&seed=${seed}`;
-  const shareText = `My Farcaster name, spelled by Earth. 🌍🛰️Try yours by @tatiansa`;
+  const shareText = `${word}, spelled by Earth. 🌍🛰️ Try yours by @tatiansa`;
 
   return {
     version: "2.0" as const,

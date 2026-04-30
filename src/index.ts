@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { registerSnapHandler } from "@farcaster/snap-hono";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+
 import { NASA_LANDSAT_URL, normalizeWord } from "./landsat.js";
 import { renderWordImage } from "./render.js";
 
@@ -11,6 +12,17 @@ const SNAP_MEDIA_TYPE = "application/vnd.farcaster.snap+json";
 const DEFAULT_BASE_URL = "http://localhost:3003";
 const DEFAULT_WORD = "FARCASTER";
 const SNAP_LINK_HEADER = `</>; rel="alternate"; type="${SNAP_MEDIA_TYPE}"`;
+
+// Можно менять под себя:
+const REGENERATE_MAX_PER_WINDOW = 5;
+const REGENERATE_WINDOW_MS = 30_000;
+
+type RateLimitEntry = {
+  count: number;
+  resetAt: number;
+};
+
+const regenerateRateLimits = new Map<string, RateLimitEntry>();
 
 function getBaseUrl(requestUrl?: string): string {
   const envBase = process.env.SNAP_PUBLIC_BASE_URL?.replace(/\/$/, "");
@@ -32,7 +44,7 @@ function corsHeaders() {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Access-Control-Allow-Headers": "Accept,Content-Type,Authorization",
-    "Access-Control-Max-Age": "86400"
+    "Access-Control-Max-Age": "86400",
   };
 }
 
@@ -42,7 +54,7 @@ function snapHeaders() {
     "Content-Type": SNAP_MEDIA_TYPE,
     "Cache-Control": "no-store",
     Vary: "Accept",
-    Link: SNAP_LINK_HEADER
+    Link: SNAP_LINK_HEADER,
   };
 }
 
@@ -51,7 +63,68 @@ function htmlHeaders() {
     ...corsHeaders(),
     "Content-Type": "text/html; charset=utf-8",
     Vary: "Accept",
-    Link: SNAP_LINK_HEADER
+    Link: SNAP_LINK_HEADER,
+  };
+}
+
+function getClientKey(request: Request): string {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  const realIp = request.headers.get("x-real-ip");
+  const cfIp = request.headers.get("cf-connecting-ip");
+  const userAgent = request.headers.get("user-agent") || "unknown-agent";
+
+  const ip =
+    forwardedFor?.split(",")[0]?.trim() ||
+    realIp ||
+    cfIp ||
+    "unknown-ip";
+
+  return `${ip}:${userAgent}`;
+}
+
+function checkRateLimit(
+  store: Map<string, RateLimitEntry>,
+  key: string,
+  maxRequests: number,
+  windowMs: number
+): { allowed: true; retryAfterSeconds: 0 } | { allowed: false; retryAfterSeconds: number } {
+  const now = Date.now();
+
+  if (store.size > 5000) {
+    for (const [storedKey, entry] of store.entries()) {
+      if (entry.resetAt <= now) {
+        store.delete(storedKey);
+      }
+    }
+  }
+
+  const current = store.get(key);
+
+  if (!current || current.resetAt <= now) {
+    store.set(key, {
+      count: 1,
+      resetAt: now + windowMs,
+    });
+
+    return {
+      allowed: true,
+      retryAfterSeconds: 0,
+    };
+  }
+
+  if (current.count >= maxRequests) {
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(1, Math.ceil((current.resetAt - now) / 1000)),
+    };
+  }
+
+  current.count += 1;
+  store.set(key, current);
+
+  return {
+    allowed: true,
+    retryAfterSeconds: 0,
   };
 }
 
@@ -61,7 +134,7 @@ app.use(
     origin: "*",
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: ["Accept", "Content-Type", "Authorization"],
-    maxAge: 86400
+    maxAge: 86400,
   })
 );
 
@@ -78,7 +151,7 @@ app.use("*", async (c, next) => {
 app.options("*", () => {
   return new Response(null, {
     status: 204,
-    headers: corsHeaders()
+    headers: corsHeaders(),
   });
 });
 
@@ -86,7 +159,7 @@ function inputPage(baseUrl: string): any {
   return {
     version: "2.0",
     theme: {
-      accent: "teal"
+      accent: "teal",
     },
     ui: {
       root: "page",
@@ -94,32 +167,32 @@ function inputPage(baseUrl: string): any {
         page: {
           type: "stack",
           props: {
-            gap: "md"
+            gap: "md",
           },
-          children: ["badge", "title", "body", "word", "generate", "credit"]
+          children: ["badge", "title", "body", "word", "generate", "credit"],
         },
         badge: {
           type: "badge",
           props: {
             label: "Landsat Snap",
             color: "teal",
-            icon: "image"
-          }
+            icon: "image",
+          },
         },
         title: {
           type: "text",
           props: {
             content: "Spell FARCASTER with Earth",
-            weight: "bold"
-          }
+            weight: "bold",
+          },
         },
         body: {
           type: "text",
           props: {
             content:
               "Type a name or Farcaster handle. The Snap will build a postcard from real satellite-letter imagery.",
-            size: "sm"
-          }
+            size: "sm",
+          },
         },
         word: {
           type: "input",
@@ -128,35 +201,35 @@ function inputPage(baseUrl: string): any {
             label: "Name or handle",
             placeholder: DEFAULT_WORD,
             defaultValue: DEFAULT_WORD,
-            maxLength: 12
-          }
+            maxLength: 12,
+          },
         },
         generate: {
           type: "button",
           props: {
             label: "Generate from Earth",
             variant: "primary",
-            icon: "zap"
+            icon: "zap",
           },
           on: {
             press: {
               action: "submit",
               params: {
-                target: `${baseUrl}/?action=generate`
-              }
-            }
-          }
+                target: `${baseUrl}/?action=generate`,
+              },
+            },
+          },
         },
         credit: {
           type: "text",
           props: {
             content:
               "Imagery source: USGS/NASA Landsat. This is an unofficial fan experiment by @tatiansa.",
-            size: "sm"
-          }
-        }
-      }
-    }
+            size: "sm",
+          },
+        },
+      },
+    },
   };
 }
 
@@ -168,7 +241,7 @@ function resultPage(baseUrl: string, word: string, seed: number): any {
   return {
     version: "2.0",
     theme: {
-      accent: "teal"
+      accent: "teal",
     },
     ui: {
       root: "page",
@@ -176,40 +249,39 @@ function resultPage(baseUrl: string, word: string, seed: number): any {
         page: {
           type: "stack",
           props: {
-            gap: "sm"
+            gap: "sm",
           },
-          children: ["title", "image", "actions", "links", "credit"]
+          children: ["title", "image", "actions", "links", "credit"],
         },
         title: {
           type: "text",
           props: {
-            content: word,
+            content: `${word} from space`,
             weight: "bold",
-            align: "center"
-          }
+            align: "center",
+          },
         },
         image: {
           type: "image",
           props: {
             url: imageUrl,
             aspect: "16:9",
-            alt: `${word} spelled using USGS/NASA Landsat satellite imagery`
-          }
+            alt: `${word} spelled using USGS/NASA Landsat satellite imagery`,
+          },
         },
         actions: {
           type: "stack",
           props: {
             direction: "horizontal",
-            gap: "sm"
+            gap: "sm",
           },
-          children: ["again", "share"]
+          children: ["again", "share"],
         },
         again: {
           type: "button",
           props: {
             label: "Regenerate",
-            variant: "primary",
-            icon: "refresh-cw"
+            icon: "refresh-cw",
           },
           on: {
             press: {
@@ -217,74 +289,157 @@ function resultPage(baseUrl: string, word: string, seed: number): any {
               params: {
                 target: `${baseUrl}/?action=regenerate&word=${encodeURIComponent(
                   word
-                )}&seed=${seed + 1}`
-              }
-            }
-          }
+                )}&seed=${seed + 1}`,
+              },
+            },
+          },
         },
         share: {
           type: "button",
           props: {
             label: "Share",
-            icon: "share"
+            variant: "primary",
+            icon: "share",
           },
           on: {
             press: {
               action: "compose_cast",
               params: {
                 text: shareText,
-                embeds: [snapUrl]
-              }
-            }
-          }
+                embeds: [snapUrl],
+              },
+            },
+          },
         },
         links: {
           type: "stack",
           props: {
             direction: "horizontal",
-            gap: "sm"
+            gap: "sm",
           },
-          children: ["new", "nasa"]
+          children: ["new", "nasa"],
         },
         new: {
           type: "button",
           props: {
-            label: "New word"
+            label: "New word",
           },
           on: {
             press: {
               action: "submit",
               params: {
-                target: `${baseUrl}/?action=new`
-              }
-            }
-          }
+                target: `${baseUrl}/?action=new`,
+              },
+            },
+          },
         },
         nasa: {
           type: "button",
           props: {
             label: "NASA tool",
-            icon: "external-link"
+            icon: "external-link",
           },
           on: {
             press: {
               action: "open_url",
               params: {
-                target: NASA_LANDSAT_URL
-              }
-            }
-          }
+                target: NASA_LANDSAT_URL,
+              },
+            },
+          },
         },
         credit: {
           type: "text",
           props: {
             content: "Unofficial Snap. Imagery source: USGS/NASA Landsat.",
             size: "sm",
-            align: "center"
-          }
-        }
-      }
-    }
+            align: "center",
+          },
+        },
+      },
+    },
+  };
+}
+
+function cooldownPage(
+  baseUrl: string,
+  word: string,
+  seed: number,
+  retryAfterSeconds: number
+): any {
+  return {
+    version: "2.0",
+    theme: {
+      accent: "teal",
+    },
+    ui: {
+      root: "page",
+      elements: {
+        page: {
+          type: "stack",
+          props: {
+            gap: "md",
+          },
+          children: ["title", "body", "retry", "new", "credit"],
+        },
+        title: {
+          type: "text",
+          props: {
+            content: "Too many regenerations",
+            weight: "bold",
+            align: "center",
+          },
+        },
+        body: {
+          type: "text",
+          props: {
+            content: `Please wait about ${retryAfterSeconds} seconds before regenerating again. This keeps the Snap fast for everyone.`,
+            size: "sm",
+            align: "center",
+          },
+        },
+        retry: {
+          type: "button",
+          props: {
+            label: "Try again",
+            variant: "primary",
+            icon: "refresh-cw",
+          },
+          on: {
+            press: {
+              action: "submit",
+              params: {
+                target: `${baseUrl}/?action=regenerate&word=${encodeURIComponent(
+                  word
+                )}&seed=${seed}`,
+              },
+            },
+          },
+        },
+        new: {
+          type: "button",
+          props: {
+            label: "New word",
+          },
+          on: {
+            press: {
+              action: "submit",
+              params: {
+                target: `${baseUrl}/?action=new`,
+              },
+            },
+          },
+        },
+        credit: {
+          type: "text",
+          props: {
+            content: "Unofficial Snap. Imagery source: USGS/NASA Landsat.",
+            size: "sm",
+            align: "center",
+          },
+        },
+      },
+    },
   };
 }
 
@@ -339,21 +494,22 @@ function htmlPage() {
 app.get("/image", async (c) => {
   const word = normalizeWord(c.req.query("word") || DEFAULT_WORD);
   const seed = Number(c.req.query("seed") || "0") || 0;
+
   const png = await renderWordImage(word, seed);
 
   return new Response(new Uint8Array(png), {
     headers: {
       ...corsHeaders(),
       "Content-Type": "image/png",
-      "Cache-Control": "public, max-age=31536000, immutable"
-    }
+      "Cache-Control": "public, max-age=31536000, immutable",
+    },
   });
 });
 
 app.get("/health", (c) => {
   return c.json(
     {
-      ok: true
+      ok: true,
     },
     200,
     corsHeaders()
@@ -381,11 +537,29 @@ registerSnapHandler(app, async (ctx) => {
   }
 
   const inputs = ctx.action.inputs ?? {};
+
   const rawInput = typeof inputs.word === "string" ? inputs.word : DEFAULT_WORD;
   const wordFromInput = normalizeWord(rawInput || DEFAULT_WORD);
   const wordFromUrl = normalizeWord(url.searchParams.get("word") || DEFAULT_WORD);
+
   const word = action === "regenerate" ? wordFromUrl : wordFromInput;
   const seed = Number(url.searchParams.get("seed") || Date.now()) || Date.now();
+
+  if (action === "regenerate") {
+    const clientKey = getClientKey(ctx.request);
+    const limitKey = `regenerate:${clientKey}:${word}`;
+
+    const limit = checkRateLimit(
+      regenerateRateLimits,
+      limitKey,
+      REGENERATE_MAX_PER_WINDOW,
+      REGENERATE_WINDOW_MS
+    );
+
+    if (!limit.allowed) {
+      return cooldownPage(baseUrl, word, seed, limit.retryAfterSeconds);
+    }
+  }
 
   return resultPage(baseUrl, word, seed);
 });
@@ -396,13 +570,13 @@ app.get("*", (c) => {
   if (accept.includes(SNAP_MEDIA_TYPE)) {
     return new Response(JSON.stringify(inputPage(getBaseUrl(c.req.url))), {
       status: 200,
-      headers: snapHeaders()
+      headers: snapHeaders(),
     });
   }
 
   return new Response(htmlPage(), {
     status: 200,
-    headers: htmlHeaders()
+    headers: htmlHeaders(),
   });
 });
 
@@ -411,7 +585,7 @@ if (process.env.VERCEL !== "1") {
 
   serve({
     fetch: app.fetch,
-    port
+    port,
   });
 
   console.log(`Earth Name Snap running at http://localhost:${port}`);

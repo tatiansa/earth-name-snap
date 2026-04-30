@@ -28,7 +28,7 @@ function snapHeaders() {
   };
 }
 
-function inputPage(baseUrl: string) {
+function inputPage(baseUrl: string): any {
   return {
     version: "2.0" as const,
     theme: { accent: "teal" },
@@ -90,7 +90,7 @@ function inputPage(baseUrl: string) {
   };
 }
 
-function resultPage(baseUrl: string, word: string, seed: number) {
+function resultPage(baseUrl: string, word: string, seed: number): any {
   const imageUrl = `${baseUrl}/image?word=${encodeURIComponent(word)}&seed=${seed}`;
   const snapUrl = `${baseUrl}/?word=${encodeURIComponent(word)}&seed=${seed}`;
   const shareText = `My Farcaster name, spelled by Earth. 🌍🛰️\n\nTry yours:`;

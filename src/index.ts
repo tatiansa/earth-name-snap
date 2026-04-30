@@ -1,10 +1,13 @@
 import { serve } from "@hono/node-server";
 import { registerSnapHandler } from "@farcaster/snap-hono";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { NASA_LANDSAT_URL, normalizeWord } from "./landsat.js";
 import { renderWordImage } from "./render.js";
 
 const app = new Hono();
+
+app.use("*", cors());
 
 const SNAP_MEDIA_TYPE = "application/vnd.farcaster.snap+json";
 const DEFAULT_BASE_URL = "http://localhost:3003";
@@ -81,7 +84,7 @@ function inputPage(baseUrl: string): any {
         credit: {
           type: "text",
           props: {
-            content: "Imagery source: USGS/NASA Landsat. This is an unofficial fan experiment by @tatiansa",
+            content: "Imagery source: USGS/NASA Landsat. This is an unofficial fan experiment by @tatiansa.",
             size: "sm"
           }
         }
@@ -93,7 +96,7 @@ function inputPage(baseUrl: string): any {
 function resultPage(baseUrl: string, word: string, seed: number): any {
   const imageUrl = `${baseUrl}/image?word=${encodeURIComponent(word)}&seed=${seed}`;
   const snapUrl = `${baseUrl}/?word=${encodeURIComponent(word)}&seed=${seed}`;
-  const shareText = `My Farcaster name, spelled by Earth. 🌍🛰️\n\nTry yours:`;
+  const shareText = `My Farcaster name, spelled by Earth. 🌍🛰️Try yours by @tatiansa`;
 
   return {
     version: "2.0" as const,

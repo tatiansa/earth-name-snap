@@ -1,8 +1,14 @@
 import sharp from "sharp";
+
 import { pickAsset } from "./landsat.js";
 
 const WIDTH = 960;
 const HEIGHT = 540;
+
+const SIDE_PADDING = 48;
+const TILE_GAP = 14;
+const MAX_TILE_W = 110;
+const TILE_ASPECT = 2.6;
 
 const imageCache = new Map<string, Buffer>();
 const outputCache = new Map<string, Buffer>();
@@ -91,16 +97,17 @@ export async function renderWordImage(word: string, seed: number): Promise<Buffe
 
   const chars = word.split("");
   const visibleLetters = chars.filter((char) => /[A-Z]/.test(char));
+  const letterCount = Math.max(1, visibleLetters.length);
 
-  const rows = visibleLetters.length > 6 ? 2 : 1;
-  const cols = Math.min(6, Math.max(1, visibleLetters.length));
+  const availableWidth = WIDTH - SIDE_PADDING * 2;
+  const tileW = Math.floor(
+    Math.min(MAX_TILE_W, (availableWidth - (letterCount - 1) * TILE_GAP) / letterCount)
+  );
+  const tileH = Math.round(tileW * TILE_ASPECT);
 
-  const gap = 10;
-  const tileW = rows === 1 ? 126 : 112;
-  const tileH = rows === 1 ? 318 : 204;
-  const rowGap = rows === 1 ? 0 : 18;
-
-  const totalGridH = rows * tileH + (rows - 1) * rowGap;
+  const gridW = letterCount * tileW + (letterCount - 1) * TILE_GAP;
+  const startX = Math.round((WIDTH - gridW) / 2);
+  const startY = Math.round((HEIGHT - tileH) / 2);
 
   const baseSvg = `
   <svg width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
@@ -122,17 +129,8 @@ export async function renderWordImage(word: string, seed: number): Promise<Buffe
   for (const char of chars) {
     if (!/[A-Z]/.test(char)) continue;
 
-    const row = Math.floor(visibleIndex / 6);
-    const col = visibleIndex % 6;
-
-    const rowCount =
-      row === rows - 1
-        ? visibleLetters.length - row * 6
-        : cols;
-
-    const rowW = rowCount * tileW + (rowCount - 1) * gap;
-    const x = Math.round((WIDTH - rowW) / 2 + col * (tileW + gap));
-    const y = Math.round((HEIGHT - totalGridH) / 2 + row * (tileH + rowGap));
+    const x = startX + visibleIndex * (tileW + TILE_GAP);
+    const y = startY;
 
     const tile = await makeTile(char, seed, visibleIndex, tileW, tileH);
     composites.push({ input: tile, left: x, top: y });

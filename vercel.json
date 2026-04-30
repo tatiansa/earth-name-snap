@@ -29,6 +29,10 @@
         {
           "key": "Vary",
           "value": "Accept"
+        },
+        {
+          "key": "Link",
+          "value": "</>; rel=\"alternate\"; type=\"application/vnd.farcaster.snap+json\""
         }
       ]
     }
